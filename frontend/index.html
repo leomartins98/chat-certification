@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Seguro</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="login-modal">
+        <div class="login-modal-content">
+            <h2>Bem-vindo!</h2>
+            <p>Digite seu nome para entrar no chat.</p>
+            <input id="username-input" type="text" placeholder="Seu nome..." maxlength="20">
+            <button id="join-button">Entrar no Chat</button>
+        </div>
+    </div>
+
+    <!-- Main Chat Application -->
+    <div id="chat-app-container" class="chat-app-container hidden">
+        <!-- Sidebar with User List -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span>Online</span>
+                <span id="user-count">(0)</span>
+            </div>
+            <div id="user-list" class="user-list">
+                <!-- User items will be appended here -->
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-container">
+            <div class="chat-header">
+                Chat em Grupo
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <!-- Messages will be appended here -->
+            </div>
+            <form id="chat-input-form" class="chat-input-form">
+                <input id="message-input" type="text" placeholder="Digite uma mensagem...">
+                <button id="send-button" type="submit" title="Enviar">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

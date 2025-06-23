@@ -1,0 +1,13 @@
+{
+  "name": "chat-backend",
+  "version": "1.0.0",
+  "description": "Backend for chat application with HTTPS and WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  }
+}

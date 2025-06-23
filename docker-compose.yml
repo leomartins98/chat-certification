@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    # A porta 443 do backend não precisa mais ser exposta diretamente para o host,
+    # pois o Nginx (frontend) irá se comunicar com ela internamente.
+    ports:
+      - "3001:443" # Mapeia a porta 443 do contêiner para a 3001 do host para debug, se necessário
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      # Monta os certificados para o backend usar
+      - ./backend/cert:/app/cert 
+
+  frontend:
+    build: ./frontend
+    ports:
+      # Expõe a porta 80 (para redirecionamento HTTP->HTTPS) e 443 (para HTTPS)
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Monta os certificados no local que o Nginx espera
+      - ./backend/cert:/etc/nginx/ssl
+    depends_on:
+      - backend
