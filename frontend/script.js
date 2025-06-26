@@ -99,9 +99,27 @@ document.addEventListener('DOMContentLoaded', () => {
             ws.send(JSON.stringify(message));
             
             // 4. Adicionar à UI local (agora o username vem do estado local)
-            addMessage({ username: username, text: messageText }, 'sent');
+            addMessage({ username: username, text: messageText, signature: signature }, 'sent');
             messageInput.value = '';
         }
+    }
+
+    // NOVO: Função para enviar a confirmação de recebimento (ack)
+    async function sendAcknowledgment(originalMessage) {
+        // Assina a *assinatura da mensagem original* para provar o recebimento dela
+        const ackSignature = await signMessage(originalMessage.signature);
+        if (!ackSignature) {
+            console.error("Could not sign the acknowledgment.");
+            return;
+        }
+
+        const ackPayload = {
+            type: 'acknowledgment',
+            originalSignature: originalMessage.signature,
+            ackSignature: ackSignature
+        };
+
+        ws.send(JSON.stringify(ackPayload));
     }
 
     async function connectWebSocket() {
@@ -132,11 +150,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (message.type === 'message') {
                     // A mensagem recebida já foi verificada pelo servidor
                     addMessage(message, 'received');
+                    // Envia a confirmação de recebimento assinada
+                    sendAcknowledgment(message);
                 } else if (message.type === 'system') {
                     addSystemMessage(message.text);
                     if (message.userList) {
                         updateUserList(message.userList);
                     }
+                } else if (message.type === 'acknowledgment') {
+                    // O servidor confirmou que o destinatário recebeu nossa mensagem
+                    updateMessageStatus(message.originalSignature);
                 }
             } catch (error) {
                 console.error('Error parsing message:', error);
@@ -195,6 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageElement = document.createElement('div');
         messageElement.classList.add('message', type);
 
+        // Adiciona um identificador único à mensagem enviada para o status de entrega
+        if (type === 'sent') {
+            messageElement.dataset.signature = msg.signature;
+        }
+
         // Adiciona o nome do usuário (remetente) para mensagens recebidas
         if (type === 'received') {
             const metaElement = document.createElement('div');
@@ -207,9 +235,29 @@ document.addEventListener('DOMContentLoaded', () => {
         textElement.classList.add('text');
         textElement.textContent = msg.text;
         messageElement.appendChild(textElement);
+
+        // Adiciona o status de entrega para mensagens enviadas
+        if (type === 'sent') {
+            const statusElement = document.createElement('div');
+            statusElement.classList.add('status');
+            statusElement.innerHTML = '&#x2713;'; // Checkmark simples (enviado)
+            messageElement.appendChild(statusElement);
+        }
         
         chatMessages.appendChild(messageElement);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // NOVO: Função para atualizar o status da mensagem para "Recebido"
+    function updateMessageStatus(signature) {
+        const messageElement = document.querySelector(`.message.sent[data-signature="${signature}"]`);
+        if (messageElement) {
+            const statusElement = messageElement.querySelector('.status');
+            if (statusElement) {
+                statusElement.innerHTML = '&#x2713;&#x2713;'; // Checkmark duplo (recebido)
+                statusElement.classList.add('received-ack');
+            }
+        }
     }
 
     function addSystemMessage(text) {

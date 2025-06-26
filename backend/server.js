@@ -23,6 +23,23 @@ const wss = new WebSocket.Server({ server });
 // Usamos um Map para associar cada conexão (ws) aos dados do cliente (username, publicKey)
 const clients = new Map();
 
+// Função para enviar uma mensagem para um cliente específico
+function sendTo(ws, message) {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+    }
+}
+
+// Função para encontrar o "par" do cliente no chat
+function getPeer(ws) {
+    for (const [clientWs, clientData] of clients.entries()) {
+        if (clientWs !== ws) {
+            return clientWs;
+        }
+    }
+    return null;
+}
+
 // 3. Funções de Broadcast
 // Modificada para aceitar um cliente a ser excluído (o próprio remetente)
 function broadcast(message, excludeWs) {
@@ -37,10 +54,14 @@ function broadcast(message, excludeWs) {
 
 function broadcastUserList() {
     const userList = Array.from(clients.values()).map(c => c.username);
-    broadcast({
+    const message = {
         type: 'system',
         text: 'User list updated.',
         userList: userList
+    };
+    // Envia a lista de usuários para todos os clientes conectados
+    clients.forEach((clientData, ws) => {
+        sendTo(ws, message);
     });
 }
 
@@ -68,6 +89,11 @@ function verifySignature(publicKey, signature, data) {
 
 // 5. Lógica de Conexão do WebSocket
 wss.on('connection', ws => {
+    // Limita a conexão a apenas 2 usuários
+    if (clients.size >= 2) {
+        console.log('Chat full. Rejecting new client.');
+        return ws.close(1013, 'Chat is full. Please try again later.');
+    }
     console.log('Client connected');
 
     ws.on('message', message => {
@@ -95,7 +121,11 @@ wss.on('connection', ws => {
                 
                 broadcastUserList();
                 // Notifica os outros usuários que alguém entrou, excluindo o próprio usuário
-                broadcast({ type: 'system', text: `${data.username} entrou no chat.` }, ws);
+                const peer = getPeer(ws);
+                if (peer) {
+                    sendTo(peer, { type: 'system', text: `${data.username} entrou no chat.` });
+                    sendTo(ws, { type: 'system', text: `Você está conversando com ${clients.get(peer).username}.` });
+                }
                 break;
 
             case 'message':
@@ -112,18 +142,56 @@ wss.on('connection', ws => {
                 if (isVerified) {
                     // Assinatura válida: retransmite a mensagem para os outros
                     console.log(`Signature verified for message from ${clientInfo.username}`);
-                    broadcast({
-                        type: 'message',
-                        username: clientInfo.username,
-                        text: data.text
-                    }, ws); // Passa o 'ws' para excluir o remetente
+                    const peer = getPeer(ws);
+                    if (peer) {
+                        // Retransmite a mensagem para o outro usuário, incluindo a assinatura original
+                        sendTo(peer, {
+                            type: 'message',
+                            username: clientInfo.username,
+                            text: data.text,
+                            signature: data.signature // Importante para o ACK
+                        });
+                    }
                 } else {
                     // Assinatura inválida: informa o remetente e não retransmite
                     console.warn(`SIGNATURE VERIFICATION FAILED for user ${clientInfo.username}`);
-                    ws.send(JSON.stringify({
+                    sendTo(ws, {
                         type: 'system',
                         text: 'ERRO: Sua mensagem não foi enviada. A assinatura digital é inválida.'
-                    }));
+                    });
+                }
+                break;
+
+            // NOVO CASO: Recebimento de Acknowledgment
+            case 'acknowledgment':
+                if (!clientInfo) {
+                    return ws.close(1008, "Client must 'join' before sending acks.");
+                }
+                if (!data.originalSignature || !data.ackSignature) {
+                    return; // Ignora acks malformados
+                }
+
+                // O "dado" que foi assinado para o ack é a assinatura da mensagem original
+                const isAckVerified = verifySignature(clientInfo.publicKey, data.ackSignature, data.originalSignature);
+
+                if (isAckVerified) {
+                    // A assinatura do ACK é válida. Agora, notifique o remetente original.
+                    console.log(`Acknowledgment verified from ${clientInfo.username} for signature ${data.originalSignature.substring(0, 10)}...`);
+                    const originalSenderWs = getPeer(ws);
+                    if (originalSenderWs) {
+                        sendTo(originalSenderWs, {
+                            type: 'acknowledgment',
+                            originalSignature: data.originalSignature,
+                            recipient: clientInfo.username // Informa quem confirmou o recebimento
+                        });
+                    }
+                } else {
+                    console.warn(`ACKNOWLEDGMENT VERIFICATION FAILED for user ${clientInfo.username}`);
+                    // Opcional: notificar o usuário que enviou o ACK inválido
+                    sendTo(ws, {
+                        type: 'system',
+                        text: 'ERRO: Seu acknowledgment de recebimento não pôde ser verificado.'
+                    });
                 }
                 break;
         }
@@ -134,8 +202,13 @@ wss.on('connection', ws => {
         if (clientInfo) {
             console.log(`${clientInfo.username} disconnected`);
             clients.delete(ws);
+            
+            // Notifica o usuário restante que o outro saiu
+            const peer = Array.from(clients.keys())[0];
+            if (peer) {
+                 sendTo(peer, { type: 'system', text: `${clientInfo.username} saiu do chat. Aguardando outro usuário...` });
+            }
             broadcastUserList();
-            broadcast({ type: 'system', text: `${clientInfo.username} saiu do chat.` });
         } else {
             console.log('A client disconnected without having joined.');
         }

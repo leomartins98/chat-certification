@@ -151,6 +151,23 @@ body {
     color: var(--primary-color);
 }
 
+.message .text {
+    word-break: break-word;
+}
+
+.message .status {
+    font-size: 0.8rem;
+    margin-left: 8px;
+    color: #e0e0e0; /* Cor do checkmark de enviado */
+    align-self: flex-end;
+    margin-top: 4px;
+}
+
+.message .status.received-ack {
+    color: #4fc3f7; /* Cor do checkmark de recebido (azul claro) */
+    font-weight: bold;
+}
+
 .message.system {
     align-self: center;
     background-color: transparent;
